@@ -1,36 +1,59 @@
 import React, { useEffect, useState } from 'react';
-import { auth, googleProvider } from '../services/firebase';
-import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { supabase } from '../services/supabase';
+import { User } from '@supabase/supabase-js';
 import AuthView from './AuthView';
 
 const ProfileView: React.FC = () => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [authLoading, setAuthLoading] = useState(false);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-            setUser(currentUser);
+        // Check active session
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setUser(session?.user ?? null);
             setLoading(false);
-            setAuthLoading(false); // Reset loading state on change
         });
-        return () => unsubscribe();
+
+        // Listen for changes
+        const {
+            data: { subscription },
+        } = supabase.auth.onAuthStateChange((_event, session) => {
+            setUser(session?.user ?? null);
+            setLoading(false);
+        });
+
+        return () => subscription.unsubscribe();
     }, []);
 
     const handleLogin = async () => {
         setAuthLoading(true);
+        setErrorMsg(null);
         try {
-            await signInWithPopup(auth, googleProvider);
-            // Auth state listener will handle the rest
-        } catch (error) {
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                    queryParams: {
+                        access_type: 'offline',
+                        prompt: 'consent',
+                    },
+                },
+            });
+
+            if (error) throw error;
+            // Note: OAuth will redirect the user, so the code below might not run immediately
+            // or effectively until they return.
+        } catch (error: any) {
             console.error("Login failed", error);
             setAuthLoading(false);
+            setErrorMsg(error.message || "Falha ao iniciar login com Google.");
         }
     };
 
     const handleLogout = async () => {
         try {
-            await signOut(auth);
+            await supabase.auth.signOut();
         } catch (error) {
             console.error("Logout failed", error);
         }
@@ -45,8 +68,12 @@ const ProfileView: React.FC = () => {
     }
 
     if (!user) {
-        return <AuthView onLogin={handleLogin} isLoading={authLoading} />;
+        return <AuthView onLogin={handleLogin} isLoading={authLoading} errorMessage={errorMsg} />;
     }
+
+    // Helper to safely get user data
+    const photoURL = user.user_metadata?.avatar_url || user.user_metadata?.picture;
+    const displayName = user.user_metadata?.full_name || user.user_metadata?.name || "Viajante";
 
     return (
         <div className="flex flex-col h-full bg-background-light dark:bg-background-dark animate-in fade-in duration-300">
@@ -60,10 +87,10 @@ const ProfileView: React.FC = () => {
                 <div className="space-y-6">
                     {/* User Card */}
                     <div className="bg-white dark:bg-white/5 p-6 rounded-2xl border border-gray-100 dark:border-white/10 flex items-center gap-4 shadow-sm">
-                        {user.photoURL ? (
+                        {photoURL ? (
                             <img
-                                src={user.photoURL}
-                                alt={user.displayName || "User"}
+                                src={photoURL}
+                                alt={displayName}
                                 className="w-16 h-16 rounded-full border-2 border-primary object-cover"
                             />
                         ) : (
@@ -74,7 +101,7 @@ const ProfileView: React.FC = () => {
 
                         <div>
                             <h2 className="text-lg font-bold text-[#1c1a0d] dark:text-white leading-tight">
-                                {user.displayName || "Viajante"}
+                                {displayName}
                             </h2>
                             <p className="text-sm text-gray-500">{user.email}</p>
                         </div>

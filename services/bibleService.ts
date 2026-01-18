@@ -1,4 +1,4 @@
-import { db } from './firebase'; // Assuming firebase holds user state if needed, but we fetch json here
+// Firebase import removed
 
 export interface BibleChapter {
     [key: number]: string; // Array of strings really, based on json structure [[v1, v2], ...]

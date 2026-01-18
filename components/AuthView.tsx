@@ -3,9 +3,10 @@ import React from 'react';
 interface AuthViewProps {
     onLogin: () => void;
     isLoading?: boolean;
+    errorMessage?: string | null;
 }
 
-const AuthView: React.FC<AuthViewProps> = ({ onLogin, isLoading = false }) => {
+const AuthView: React.FC<AuthViewProps> = ({ onLogin, isLoading = false, errorMessage }) => {
     return (
         <div className="flex flex-col items-center justify-center h-full p-8 bg-background-light dark:bg-background-dark text-center relative overflow-hidden">
             {/* Background Decorative Elements */}
@@ -52,6 +53,12 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin, isLoading = false }) => {
                         Ao criar uma conta, você concorda com nossos <br />
                         <button className="underline hover:text-primary transition-colors">Termos de Uso</button> e <button className="underline hover:text-primary transition-colors">Política de Privacidade</button>.
                     </p>
+
+                    {errorMessage && (
+                        <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400 text-sm px-4 py-3 rounded-lg text-center animate-in fade-in slide-in-from-top-1">
+                            {errorMessage}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
