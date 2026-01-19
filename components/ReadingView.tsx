@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { toggleFavorite, saveNote, getNote } from '../services/api';
+import { toggleFavorite, saveNote, getNote, logReading } from '../services/api';
 
 // ... (imports remain the same, just adding saveNote, getNote)
 
