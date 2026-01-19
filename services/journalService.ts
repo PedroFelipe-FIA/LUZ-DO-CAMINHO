@@ -21,26 +21,38 @@ const FALLBACK_ENTRIES: JournalEntry[] = [
 ];
 
 export const getWeeklyEntries = async (): Promise<JournalEntry[]> => {
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
 
-    // Generate entries for the last 7 days (including today)
-    for (let i = 0; i < 7; i++) {
-        const date = new Date(today);
-        date.setDate(today.getDate() - i);
+        // Fetch published devotionals
+        const { data, error } = await supabase
+            .from('devotionals')
+            .select('*')
+            .eq('is_published', true)
+            .order('created_at', { ascending: false })
+            .limit(7);
 
-        // Format date for display
-        const day = date.getDate().toString().padStart(2, '0');
-        const month = date.toLocaleString('pt-BR', { month: 'short' }).toUpperCase().replace('.', '');
+        if (error) {
+            console.error("Error fetching devotionals:", error);
+            return FALLBACK_ENTRIES;
+        }
 
-        entries.push({
-            id: `entry-${i}`,
-            dateDay: day,
-            dateMonth: month,
-            title: titles[i % titles.length],
-            preview: previews[i % previews.length],
-            // Add random image to some entries for variety
-            imageUrl: i % 3 === 0 ? `https://source.unsplash.com/random/200x200?bible,church&sig=${i}` : undefined
-        });
+        if (!data || data.length === 0) {
+            return FALLBACK_ENTRIES;
+        }
+
+        // Map Supabase data to App Type
+        return data.map(d => ({
+            id: d.id.toString(),
+            dateDay: d.date_day,
+            dateMonth: d.date_month,
+            title: d.title,
+            preview: d.preview,
+            imageUrl: d.image_url
+        }));
+
+    } catch (err) {
+        console.error("Failed to load devotionals service", err);
+        return FALLBACK_ENTRIES;
     }
-
-    return entries;
 };
