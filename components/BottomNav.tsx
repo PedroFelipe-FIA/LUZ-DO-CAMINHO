@@ -53,6 +53,8 @@ const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab }) => {
           <span className="text-[10px] font-bold uppercase tracking-wider">Perfil</span>
         </button>
 
+        {/* Secret Admin Button (Double click profile maybe? For now explicit button for dev) */}
+
       </div>
     </nav>
   );

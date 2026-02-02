@@ -19,7 +19,8 @@ export const toggleFavorite = async (verseRef: string, text: string): Promise<bo
 
     if (error) {
         console.error("Error checking favorite:", error);
-        throw error;
+        // Don't throw, just return false/failure
+        return false;
     }
 
     if (existing) {

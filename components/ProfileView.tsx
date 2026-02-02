@@ -31,7 +31,12 @@ const ProfileView: React.FC = () => {
     // Load Stats when user is available
     useEffect(() => {
         if (user) {
-            getProfileStats().then(setStats).catch(console.error);
+            getProfileStats()
+                .then(setStats)
+                .catch(err => {
+                    console.error("Failed to load profile stats", err);
+                    // Keep default 0 stats - no broken UI
+                });
         }
     }, [user]);
 

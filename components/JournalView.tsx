@@ -15,26 +15,31 @@ const JournalView: React.FC<JournalViewProps> = ({ onNavigate }) => {
   const [localNotes, setLocalNotes] = useState<Note[]>([]);
 
   useEffect(() => {
+    let isMounted = true;
+
     const loadEntries = async () => {
+      setLoading(true);
       try {
         const data = await getWeeklyEntries();
-        setEntries(data);
+        if (isMounted) setEntries(data);
       } catch (error) {
         console.error("Failed to load journal entries", error);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
-
-    // ...
-
     const loadNotes = async () => {
+      setLoading(true); // Reuse loading state or add specific one for notes
       try {
         const notes = await getAllNotes();
-        setLocalNotes(notes);
+        if (isMounted) setLocalNotes(notes);
       } catch (error) {
         console.error("Failed to load notes", error);
+        // Maybe set empty notes to avoid showing stale data if error
+        if (isMounted) setLocalNotes([]);
+      } finally {
+        if (isMounted) setLoading(false);
       }
     };
 
@@ -43,6 +48,8 @@ const JournalView: React.FC<JournalViewProps> = ({ onNavigate }) => {
     } else {
       loadNotes();
     }
+
+    return () => { isMounted = false; };
   }, [activeTab]);
 
   const handleNoteClick = (note: Note) => {
@@ -122,7 +129,11 @@ const JournalView: React.FC<JournalViewProps> = ({ onNavigate }) => {
 
         {activeTab === 'NOTES' && (
           <div className="space-y-4 pt-4">
-            {localNotes.length === 0 ? (
+            {loading ? (
+              <div className="flex justify-center p-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+              </div>
+            ) : localNotes.length === 0 ? (
               <div className="text-center py-10">
                 <div className="bg-gray-100 dark:bg-white/5 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
                   <span className="material-symbols-outlined text-gray-400 text-3xl">note_add</span>

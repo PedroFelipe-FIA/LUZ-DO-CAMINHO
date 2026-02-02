@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { toggleFavorite, saveNote, getNote, logReading } from '../services/api';
+import { toggleFavorite, saveNote, getNote, logReading, checkFavorite } from '../services/api';
 
 // ... (imports remain the same, just adding saveNote, getNote)
 
@@ -38,10 +38,34 @@ const formatAbbrev = (abbrev: string): string => {
 const ChapterSection: React.FC<{
   chapter: RenderedChapter;
   onAnnotate: (chapter: RenderedChapter) => void;
-  fontSize: number;
+  fontSize: 'normal' | 'large' | 'xlarge';
 }> = ({ chapter, onAnnotate, fontSize }) => {
   const [isFavorite, setIsFavorite] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Check initial favorite status
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const ref = `${chapter.bookName} ${chapter.chapterIndex + 1}`;
+        const isFav = await checkFavorite(ref);
+        setIsFavorite(isFav);
+      } catch (error) {
+        console.error("Failed to check favorite status", error);
+      }
+    };
+    checkStatus();
+
+    // Listen for global updates (e.g. from header)
+    const handleUpdate = (e: any) => {
+      const ref = `${chapter.bookName} ${chapter.chapterIndex + 1}`;
+      if (e.detail.ref === ref) {
+        setIsFavorite(e.detail.isFavorite);
+      }
+    };
+    window.addEventListener('favorite-updated', handleUpdate);
+    return () => window.removeEventListener('favorite-updated', handleUpdate);
+  }, [chapter.bookName, chapter.chapterIndex]);
 
   const handleFavorite = async () => {
     setIsLoading(true);
@@ -50,6 +74,12 @@ const ChapterSection: React.FC<{
       const preview = chapter.verses[0].substring(0, 50) + "...";
       const newState = await toggleFavorite(ref, preview);
       setIsFavorite(newState);
+
+      // Dispatch event to update other components (header)
+      window.dispatchEvent(new CustomEvent('favorite-updated', {
+        detail: { ref, isFavorite: newState }
+      }));
+
     } catch (error) {
       console.error("Failed to toggle favorite", error);
     } finally {
@@ -82,6 +112,14 @@ const ChapterSection: React.FC<{
     }
   };
 
+  const getFontSizeClass = () => {
+    switch (fontSize) {
+      case 'large': return 'text-2xl leading-loose';
+      case 'xlarge': return 'text-3xl leading-loose';
+      default: return 'text-xl leading-relaxed';
+    }
+  };
+
   return (
     <section id={`chapter-${chapter.key}`} data-key={chapter.key} className="scroll-mt-20">
       <div className="mb-4">
@@ -91,14 +129,13 @@ const ChapterSection: React.FC<{
         <div className="h-1 w-12 bg-primary mt-2 rounded-full"></div>
       </div>
 
-      <article className={`font-serif leading-relaxed space-y-4 text-justify text-[#1c1a0d] dark:text-[#e0e0e0] transition-all duration-300 ${fontSize === 0 ? 'text-lg' : fontSize === 1 ? 'text-xl' : 'text-2xl'
-        }`}>
+      <article className={`font-serif text-justify text-[#1c1a0d] dark:text-[#e0e0e0] space-y-4 ${getFontSizeClass()}`}>
         {chapter.verses.map((verse, vIdx) => (
           <p key={vIdx} id={`verse-${chapter.key}-${vIdx + 1}`} data-book={chapter.bookName} data-chapter={chapter.chapterIndex + 1} data-verse={vIdx + 1} className="transition-colors duration-500 rounded p-1 relative">
             <sup className="text-xs text-primary font-bold mr-1 align-top">{vIdx + 1}</sup>
             {vIdx === 0 ? (
               <>
-                <span className="float-left font-bold text-primary mr-2 leading-[0.8] mt-2 mb-[-8px]" style={{ fontSize: '3.5rem' }}>
+                <span className="float-left font-bold text-primary mr-2 leading-[0.8] mt-2 mb-[-8px]" style={{ fontSize: fontSize === 'xlarge' ? '4.5rem' : fontSize === 'large' ? '4rem' : '3.5rem' }}>
                   {verse.charAt(0)}
                 </span>
                 {verse.substring(1)}
@@ -161,14 +198,76 @@ const ReadingView: React.FC = () => {
   const [currentNote, setCurrentNote] = useState("");
   const [activeNoteChapter, setActiveNoteChapter] = useState<RenderedChapter | null>(null);
 
-  // Appearance
-  const [fontSize, setFontSize] = useState(1); // 0=Normal, 1=Large, 2=Extra
-  const [currentVisibleChapter, setCurrentVisibleChapter] = useState<RenderedChapter | null>(null);
+  const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
+  const [headerIsFavorite, setHeaderIsFavorite] = useState(false);
+  // Track the key of the chapter currently driving the title/focus
+  const [activeChapterKey, setActiveChapterKey] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
   const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const isFetchingRef = useRef(false);
+
+  // Sync header favorite button with active chapter logic
+  useEffect(() => {
+    const syncHeaderFavorite = async () => {
+      if (!activeChapterKey) return;
+      const chapter = renderedChapters.find(c => c.key === activeChapterKey);
+      if (!chapter) return;
+
+      try {
+        const ref = `${chapter.bookName} ${chapter.chapterIndex + 1}`;
+        const isFav = await checkFavorite(ref);
+        setHeaderIsFavorite(isFav);
+      } catch (e) { console.error(e); }
+    };
+    syncHeaderFavorite();
+  }, [activeChapterKey, renderedChapters]);
+
+  // Listen for favorite updates from children
+  useEffect(() => {
+    const handleFavUpdate = (e: any) => {
+      // If the updated favorite matches our active chapter, update header
+      if (activeChapterKey) {
+        const chapter = renderedChapters.find(c => c.key === activeChapterKey);
+        if (chapter && e.detail.ref === `${chapter.bookName} ${chapter.chapterIndex + 1}`) {
+          setHeaderIsFavorite(e.detail.isFavorite);
+        }
+      }
+    };
+    window.addEventListener('favorite-updated', handleFavUpdate);
+    return () => window.removeEventListener('favorite-updated', handleFavUpdate);
+  }, [activeChapterKey, renderedChapters]);
+
+
+  // --- Actions ---
+  const cycleFontSize = () => {
+    setFontSize(prev => {
+      if (prev === 'normal') return 'large';
+      if (prev === 'large') return 'xlarge';
+      return 'normal';
+    });
+  };
+
+  const handleHeaderBookmark = async () => {
+    if (!activeChapterKey) return;
+    const chapter = renderedChapters.find(c => c.key === activeChapterKey);
+    if (!chapter) return;
+
+    try {
+      const ref = `${chapter.bookName} ${chapter.chapterIndex + 1}`;
+      const preview = chapter.verses[0].substring(0, 50) + "...";
+      const newState = await toggleFavorite(ref, preview);
+      setHeaderIsFavorite(newState);
+      // Dispatch event to update child components
+      window.dispatchEvent(new CustomEvent('favorite-updated', {
+        detail: { ref, isFavorite: newState }
+      }));
+    } catch (error) {
+      console.error("Header bookmark failed", error);
+    }
+  };
+
 
   // --- Initial Load ---
   useEffect(() => {
@@ -196,6 +295,7 @@ const ReadingView: React.FC = () => {
               key: pendingKey
             };
             setRenderedChapters([initialChapter]);
+            setActiveChapterKey(initialChapter.key);
             setCurrentTitle(`${initialChapter.bookName} ${initialChapter.chapterIndex + 1}:1`);
             return; // Skip default genesis load
           }
@@ -212,6 +312,7 @@ const ReadingView: React.FC = () => {
             key: `${gen.abbrev}-0`
           };
           setRenderedChapters([initialChapter]);
+          setActiveChapterKey(initialChapter.key);
           setCurrentTitle(`${initialChapter.bookName} ${initialChapter.chapterIndex + 1}:1`);
         }
       } catch (error) {
@@ -337,26 +438,25 @@ const ReadingView: React.FC = () => {
         const target = visible[0].target as HTMLElement;
         const book = target.getAttribute('data-book');
         const chapter = target.getAttribute('data-chapter');
-        const verse = target.getAttribute('data-verse');
+        //const verse = target.getAttribute('data-verse');
 
-        if (book && chapter && verse) {
-          setCurrentTitle(`${book} ${chapter}:${verse}`);
-        } else {
-          // Fallback to chapter title
-          const chapterKey = target.closest('section')?.getAttribute('data-key');
-          if (chapterKey) {
-            const c = renderedChapters.find(ch => ch.key === chapterKey);
-            if (c) {
-              setCurrentTitle(`${c.bookName} ${c.chapterIndex + 1}`);
-              setCurrentVisibleChapter(c);
-            }
+        // Identify which chapter we are in
+        const chapterKey = target.closest('section')?.getAttribute('data-key');
+        if (chapterKey) {
+          // Update active chapter key for header actions
+          setActiveChapterKey(chapterKey);
+
+          const c = renderedChapters.find(ch => ch.key === chapterKey);
+          if (c) {
+            // For now showing Chapter only in title to keep it clean, or could add verse if really needed
+            setCurrentTitle(`${c.bookName} ${c.chapterIndex + 1}`);
           }
         }
       }
     }, {
       root: container,
       threshold: [0.1, 0.5, 1.0],
-      rootMargin: "-10% 0px -80% 0px" // Focus on the top area of the viewport
+      rootMargin: "-10% 0px -60% 0px" // Adjusted focus area
     });
 
     // Need to observe new elements after render
@@ -392,6 +492,7 @@ const ReadingView: React.FC = () => {
       const newChapter = createChapterObject(selectedBook, selectedChapterIdx);
       setRenderedChapters([newChapter]);
       setModalOpen(false);
+      setActiveChapterKey(newChapter.key);
 
       // Scroll to verse after render
       setTimeout(() => {
@@ -512,27 +613,14 @@ const ReadingView: React.FC = () => {
           </button>
 
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setFontSize(prev => (prev + 1) % 3)}
-              className="text-primary hover:bg-primary/10 p-2 rounded-full transition-colors relative"
-            >
+            <button onClick={cycleFontSize} className="text-primary hover:bg-primary/10 p-2 rounded-full transition-colors flex items-center justify-center">
               <span className="material-symbols-outlined">text_fields</span>
-              <span className="absolute bottom-1 right-1 text-[8px] font-bold">
-                {fontSize === 0 ? 'A' : fontSize === 1 ? 'A+' : 'A++'}
-              </span>
+              <span className="text-[10px] ml-1 font-bold">{fontSize === 'normal' ? 'A' : fontSize === 'large' ? 'A+' : 'A++'}</span>
             </button>
-            <button
-              onClick={async () => {
-                if (currentVisibleChapter) {
-                  const ref = `${currentVisibleChapter.bookName} ${currentVisibleChapter.chapterIndex + 1}`;
-                  const preview = currentVisibleChapter.verses[0].substring(0, 50) + "...";
-                  await toggleFavorite(ref, preview);
-                  // Trigger re-render or toast? For now just optimist toggle visually if we had state
-                  alert(`Capítulo ${currentVisibleChapter.bookName} ${currentVisibleChapter.chapterIndex + 1} ${await checkFavorite(ref) ? 'removido dos' : 'adicionado aos'} favoritos!`);
-                }
-              }}
-              className="text-primary hover:bg-primary/10 p-2 rounded-full transition-colors">
-              <span className="material-symbols-outlined">bookmark</span>
+            <button onClick={handleHeaderBookmark} className="text-primary hover:bg-primary/10 p-2 rounded-full transition-colors">
+              <span className={`material-symbols-outlined ${headerIsFavorite ? 'filled-icon' : ''}`}>
+                {headerIsFavorite ? 'bookmark' : 'bookmark_border'}
+              </span>
             </button>
           </div>
         </div>
@@ -611,6 +699,3 @@ const ReadingView: React.FC = () => {
 };
 
 export default ReadingView;
-
-// Re-import checkFavorite for the header button usage
-import { checkFavorite } from '../services/api';
