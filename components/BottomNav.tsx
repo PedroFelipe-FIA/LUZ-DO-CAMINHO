@@ -53,14 +53,6 @@ const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab }) => {
           <span className="text-[10px] font-bold uppercase tracking-wider">Perfil</span>
         </button>
 
-        {/* Secret Admin Button (Double click profile maybe? For now explicit button for dev) */}
-        <button
-          onClick={() => setActiveTab(Tab.MISSION_CONTROL)}
-          className={`flex flex-col items-center gap-1 ${activeTab === Tab.MISSION_CONTROL ? "text-green-500" : "text-gray-400/20 hover:text-green-500/50"}`}
-        >
-          <span className="material-symbols-outlined text-[20px]">rocket_launch</span>
-          <span className="text-[8px] font-bold uppercase tracking-wider">Admin</span>
-        </button>
       </div>
     </nav>
   );

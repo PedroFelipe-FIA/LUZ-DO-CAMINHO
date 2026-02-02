@@ -38,7 +38,8 @@ const formatAbbrev = (abbrev: string): string => {
 const ChapterSection: React.FC<{
   chapter: RenderedChapter;
   onAnnotate: (chapter: RenderedChapter) => void;
-}> = ({ chapter, onAnnotate }) => {
+  fontSize: number;
+}> = ({ chapter, onAnnotate, fontSize }) => {
   const [isFavorite, setIsFavorite] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -90,7 +91,8 @@ const ChapterSection: React.FC<{
         <div className="h-1 w-12 bg-primary mt-2 rounded-full"></div>
       </div>
 
-      <article className="font-serif text-xl leading-relaxed space-y-4 text-justify text-[#1c1a0d] dark:text-[#e0e0e0]">
+      <article className={`font-serif leading-relaxed space-y-4 text-justify text-[#1c1a0d] dark:text-[#e0e0e0] transition-all duration-300 ${fontSize === 0 ? 'text-lg' : fontSize === 1 ? 'text-xl' : 'text-2xl'
+        }`}>
         {chapter.verses.map((verse, vIdx) => (
           <p key={vIdx} id={`verse-${chapter.key}-${vIdx + 1}`} data-book={chapter.bookName} data-chapter={chapter.chapterIndex + 1} data-verse={vIdx + 1} className="transition-colors duration-500 rounded p-1 relative">
             <sup className="text-xs text-primary font-bold mr-1 align-top">{vIdx + 1}</sup>
@@ -158,6 +160,10 @@ const ReadingView: React.FC = () => {
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [currentNote, setCurrentNote] = useState("");
   const [activeNoteChapter, setActiveNoteChapter] = useState<RenderedChapter | null>(null);
+
+  // Appearance
+  const [fontSize, setFontSize] = useState(1); // 0=Normal, 1=Large, 2=Extra
+  const [currentVisibleChapter, setCurrentVisibleChapter] = useState<RenderedChapter | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -340,7 +346,10 @@ const ReadingView: React.FC = () => {
           const chapterKey = target.closest('section')?.getAttribute('data-key');
           if (chapterKey) {
             const c = renderedChapters.find(ch => ch.key === chapterKey);
-            if (c) setCurrentTitle(`${c.bookName} ${c.chapterIndex + 1}`);
+            if (c) {
+              setCurrentTitle(`${c.bookName} ${c.chapterIndex + 1}`);
+              setCurrentVisibleChapter(c);
+            }
           }
         }
       }
@@ -503,10 +512,26 @@ const ReadingView: React.FC = () => {
           </button>
 
           <div className="flex items-center gap-4">
-            <button className="text-primary hover:bg-primary/10 p-2 rounded-full transition-colors">
+            <button
+              onClick={() => setFontSize(prev => (prev + 1) % 3)}
+              className="text-primary hover:bg-primary/10 p-2 rounded-full transition-colors relative"
+            >
               <span className="material-symbols-outlined">text_fields</span>
+              <span className="absolute bottom-1 right-1 text-[8px] font-bold">
+                {fontSize === 0 ? 'A' : fontSize === 1 ? 'A+' : 'A++'}
+              </span>
             </button>
-            <button className="text-primary hover:bg-primary/10 p-2 rounded-full transition-colors">
+            <button
+              onClick={async () => {
+                if (currentVisibleChapter) {
+                  const ref = `${currentVisibleChapter.bookName} ${currentVisibleChapter.chapterIndex + 1}`;
+                  const preview = currentVisibleChapter.verses[0].substring(0, 50) + "...";
+                  await toggleFavorite(ref, preview);
+                  // Trigger re-render or toast? For now just optimist toggle visually if we had state
+                  alert(`Capítulo ${currentVisibleChapter.bookName} ${currentVisibleChapter.chapterIndex + 1} ${await checkFavorite(ref) ? 'removido dos' : 'adicionado aos'} favoritos!`);
+                }
+              }}
+              className="text-primary hover:bg-primary/10 p-2 rounded-full transition-colors">
               <span className="material-symbols-outlined">bookmark</span>
             </button>
           </div>
@@ -573,7 +598,7 @@ const ReadingView: React.FC = () => {
 
         <div className="max-w-2xl mx-auto px-6 py-6 space-y-12">
           {renderedChapters.map((chapter) => (
-            <ChapterSection key={chapter.key} chapter={chapter} onAnnotate={handleOpenNoteModal} />
+            <ChapterSection key={chapter.key} chapter={chapter} onAnnotate={handleOpenNoteModal} fontSize={fontSize} />
           ))}
         </div>
 
@@ -586,3 +611,6 @@ const ReadingView: React.FC = () => {
 };
 
 export default ReadingView;
+
+// Re-import checkFavorite for the header button usage
+import { checkFavorite } from '../services/api';
